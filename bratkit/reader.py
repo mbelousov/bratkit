@@ -1,9 +1,11 @@
-import json
-import os
 import codecs
 import glob
+import json
+import os
 
 from bratkit.models import AnnotatedDocument
+
+
 def _default(self, obj):
     return getattr(obj.__class__, "to_json", _default.default)(obj)
 
@@ -11,12 +13,14 @@ def _default(self, obj):
 _default.default = json.JSONEncoder().default
 json.JSONEncoder.default = _default
 
+
 def read_file_contents(filepath, encoding='utf-8'):
     """
     Reads file context
     """
     with codecs.open(filepath, 'r', encoding) as f:
         return f.read()
+
 
 class BratCorpusReader(object):
     def __init__(self, corpus_path):
@@ -28,6 +32,10 @@ class BratCorpusReader(object):
         if not self._documents:
             self.read_corpus()
         return self._documents
+
+    @property
+    def num_documents(self):
+        return len(self.documents)
 
     def read_corpus(self):
         self._documents = []
