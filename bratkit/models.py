@@ -29,6 +29,20 @@ class Span(object):
     def __ne__(self, other):
         return not self.__eq__(other)
 
+    def __lt__(self, other):
+        return (self.start < other.start
+                or (self.start == other.start and self.end < other.end))
+
+    def __le__(self, other):
+        return self.__lt__(other) or self.__eq__(other)
+
+    def __gt__(self, other):
+        return (self.start > other.start
+                or (self.start == other.start and self.end > other.end))
+
+    def __ge__(self, other):
+        return self.__gt__(other) or self.__eq__(other)
+
     def __hash__(self):
         return hash((self.start, self.end))
 
@@ -44,6 +58,9 @@ class Span(object):
 
     def to_json(self):
         return self.start, self.end
+
+    def get_span_text(self, text):
+        return text[self.start:self.end]
 
 
 class DiscontinuousSpan(Span):
@@ -68,6 +85,8 @@ class DiscontinuousSpan(Span):
 
     def add(self, span):
         self.__spans.add(span)
+        self.start = min(self.__spans).start
+        self.end = max(self.__spans).end
 
     def get(self, index):
         return list(self.__spans)[index]
@@ -82,6 +101,8 @@ class DiscontinuousSpan(Span):
     def length(self):
         return sum([s.length for s in self.__spans])
 
+    def get_span_text(self, text):
+        return " ".join([text[s.start:s.end] for s in sorted(self.__spans)])
 
 class Annotation(object):
     """BRAT Annotation object (base)

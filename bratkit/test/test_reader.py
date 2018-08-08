@@ -15,7 +15,8 @@ class TestBratCorpusReader(unittest.TestCase):
         self.assertEqual(len(corpus.documents[0].annotations['notes']), 0)
         self.assertEqual(
             len(corpus.documents[0].annotations['normalizations']), 0)
+        corpus.validate()
 
-    def test_invalid_apth(self):
+    def test_invalid_path(self):
         corpus = BratCorpusReader('./corpus_invalid/')
         self.assertRaises(FileNotFoundError, corpus.read_corpus)
