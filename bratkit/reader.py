@@ -89,5 +89,5 @@ class BratCorpusReader(object):
                     "\n\tSpan: %s"
                     "\n\tContent: \"%s\""
                     "\n\tIn-document content: \"%s\"" % (
-                        doc.id, eid, ent.span, ent.content, doc_content
+                        doc.uid, eid, ent.span, ent.content, doc_content
                     ))

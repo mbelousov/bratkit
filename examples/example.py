@@ -7,7 +7,7 @@ if __name__ == '__main__':
     corpus = BratCorpusReader(corpus_path)
     print("Documents in corpus: %d" % corpus.num_documents)
     for doc in corpus.documents:
-        print('{:-^80}'.format(doc.id))
+        print('{:-^80}'.format(doc.uid))
         print("\"%s...\"" % doc.text[:75])
         for anntype, anns in doc.annotations.items():
             print("\t%d %s" % (len(anns), anntype))

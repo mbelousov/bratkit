@@ -1,5 +1,8 @@
+import itertools
 import json
 import os
+import random
+from collections import OrderedDict
 
 from bratkit.exceptions import UnsupportedAnnotationException
 
@@ -104,11 +107,12 @@ class DiscontinuousSpan(Span):
     def get_span_text(self, text):
         return " ".join([text[s.start:s.end] for s in sorted(self.__spans)])
 
+
 class Annotation(object):
     """BRAT Annotation object (base)
     For more information see http://brat.nlplab.org/standoff.html
     """
-    id = None
+    eid = None
 
     @staticmethod
     def factory(line=""):
@@ -129,13 +133,13 @@ class Annotation(object):
         return cls(line)
 
     def __init__(self, line):
-        self.id = line.split("\t")[0]
+        self.eid = line.split("\t")[0]
 
     def __str__(self):
         return self.__unicode__()
 
     def __unicode__(self):
-        return "<Ann: %s>" % self.id
+        return "<Ann: %s>" % self.eid
 
     def to_json(self):
         return self.__dict__
@@ -182,7 +186,7 @@ class Entity(Annotation):
 
     def __unicode__(self):
         return "<%s: %s[%s] %s>" % (
-            self.id, self.type, self.span, self.content)
+            self.eid, self.type, self.span, self.content)
 
 
 class Attribute(Annotation):
@@ -205,7 +209,7 @@ class Attribute(Annotation):
 
     def __unicode__(self):
         return "<%s: %s %s>" % (
-            self.id, self.attr_name, self.ann_id)
+            self.eid, self.attr_name, self.ann_id)
 
 
 class Normalization(Annotation):
@@ -227,7 +231,7 @@ class Normalization(Annotation):
         self.entry_value = entry_value.strip()
 
     def __unicode__(self):
-        return "<%s: %s[%s] %s>" % (self.id, self.resource_id, self.entry_id,
+        return "<%s: %s[%s] %s>" % (self.eid, self.resource_id, self.entry_id,
                                     self.entry_value)
 
 
@@ -235,20 +239,21 @@ class Relation(Annotation):
     """Relation annotation
     """
     type = ""
-    arguments = {}
+    arguments = OrderedDict()
+    entity_arguments = {}
 
     def __init__(self, line):
         super(Relation, self).__init__(line)
         info = line.split("\t")[1].split()
         self.type = info[0]
-        self.arguments = {}
+        self.arguments = OrderedDict()
         for arg in info[1:]:
             k, v = arg.split(':')
             self.arguments[k] = v
 
     def __unicode__(self):
         return '<%s: %s %s>' % (
-            self.id, self.type, self.arguments
+            self.eid, self.type, self.arguments
         )
 
     def to_json(self):
@@ -262,7 +267,7 @@ class Equiv(Annotation):
         super().__init__(line)
         self.references = []
         self.type = None
-        self.id, info = line.split("\t")
+        self.eid, info = line.split("\t")
         parts = info.split(' ')
         self.type, refs = parts[0], parts[1:]
         for ref in refs:
@@ -283,27 +288,27 @@ class Note(Annotation):
         self.content = content
 
     def __unicode__(self):
-        return '<%s: %s "%s">' % (self.id, self.ref, self.content)
+        return '<%s: %s "%s">' % (self.eid, self.ref, self.content)
 
 
 class AnnotatedDocument(object):
     def __init__(self):
         self.annotations = {}
         self.text = ""
-        self.id = 0
+        self.uid = 0
 
     def __parse_line(self, line):
         annotation = Annotation.factory(line)
         if annotation is None:
             return False
         k = annotation.__plural__.lower()
-        self.annotations.setdefault(k, {})[annotation.id] = annotation
+        self.annotations.setdefault(k, {})[annotation.eid] = annotation
 
     def readfile(self, filepath):
         self.annotations = {}
         for _, cls in ANNOTATION_MAP.items():
             self.annotations[cls.get_plural().lower()] = {}
-        self.id = os.path.splitext(os.path.basename(filepath))[0]
+        self.uid = os.path.splitext(os.path.basename(filepath))[0]
         with open(filepath, 'r') as f:
             for line in f:
                 self.__parse_line(line)
@@ -312,12 +317,80 @@ class AnnotatedDocument(object):
     def __entity_order(self):
         return ['T', 'N', 'R', '#']
 
+    def get_entities(self):
+        return self.annotations.get('entities', {})
+
+    def get_relations(self):
+        return self.annotations.get('relations', {})
+
+    def get_entities_relations(self):
+        ent_rels = {}
+        for rid, rel in self.annotations.get('relations', {}).items():
+            args = {argname: self.annotations['entities'][argval]
+                    for argname, argval in rel.arguments.items()}
+            # rows[rid] = (rel.type, args)
+            e1, e2 = list(rel.arguments.values())
+            ent_rels.setdefault(e1, {}).setdefault(e2, {})[rel.type] = args
+        return ent_rels
+
+    def get_relations_rows(self, rel_ent_pairs, neg=None,
+                           dist_thresh=0, random_seed=None,
+                           no_rel_label='NO_RELATION',
+                           entfunc=None, labelfunc=None):
+        if len(rel_ent_pairs) <= 0:
+            raise ValueError("Provide entity pairs for relations!")
+        if entfunc is None:
+            entfunc = lambda doc, ent: "%s-%s" % (doc.uid, ent.span)
+        if labelfunc is None:
+            labelfunc = lambda x: x
+
+        pos_rows = []
+        neg_rows = []
+        ent_rels = self.get_entities_relations()
+        ent_types = {}
+        for ent in self.get_entities().values():
+            ent_types.setdefault(ent.type, []).append(ent)
+
+        for et1, et2 in rel_ent_pairs:
+            e1_list = ent_types.get(et1, [])
+            e2_list = ent_types.get(et2, [])
+            for e1, e2 in itertools.product(e1_list, e2_list):
+                dist = (max(e1.span.end, e2.span.end) -
+                        min(e1.span.start, e2.span.start) + 1)
+                e1e2_rels = ent_rels.get(e1.eid, {}).get(e2.eid, {})
+                if len(e1e2_rels) == 0:
+                    labels = [no_rel_label]
+                    if 0 < dist_thresh < dist:
+                        # print("SKIP d=%d" % dist)
+                        continue
+                else:
+                    labels = list(e1e2_rels.keys())
+                row = (entfunc(self, e1), entfunc(self, e2), labelfunc(labels))
+                if labels == [no_rel_label]:
+                    neg_rows.append(row)
+                else:
+                    pos_rows.append(row)
+        neg_lim = 0
+
+        if neg == 'auto':
+            neg_lim = len(pos_rows)
+        elif neg and neg > 0:
+            neg_lim = neg
+
+        if neg_lim:
+            random.seed(random_seed)
+            random.shuffle(neg_rows)
+            neg_rows = neg_rows[:neg_lim]
+        if neg == 0:
+            return pos_rows
+        return pos_rows + neg_rows
+
     def __unicode__(self):
         return "<AnnotatedDoc>"
 
     def to_json(self):
         return {
-            'id': self.id,
+            'eid': self.uid,
             'text': self.text,
             'annotations': self.annotations
         }
