@@ -19,4 +19,4 @@ class TestBratCorpusReader(unittest.TestCase):
 
     def test_invalid_path(self):
         corpus = BratCorpusReader('./corpus_invalid/')
-        self.assertRaises(FileNotFoundError, corpus.read_corpus)
+        self.assertRaises(IOError, corpus.read_corpus)

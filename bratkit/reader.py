@@ -63,7 +63,7 @@ class BratCorpusReader(object):
 
     def get_files(self):
         if not os.path.exists(self.corpus_path):
-            raise FileNotFoundError("%s doesn't exist" % self.corpus_path)
+            raise IOError("%s doesn't exist" % self.corpus_path)
         return sorted(glob.glob(os.path.join(self.corpus_path, '*.ann')))
 
     def process_document(self, filepath):
