@@ -1,12 +1,12 @@
 from __future__ import print_function
 
-import codecs
 import glob
 import json
 import os
 import sys
 
 from bratkit.models import AnnotatedDocument
+from bratkit.utils import read_file_contents
 
 
 def _default(self, obj):
@@ -15,14 +15,6 @@ def _default(self, obj):
 
 _default.default = json.JSONEncoder().default
 json.JSONEncoder.default = _default
-
-
-def read_file_contents(filepath, encoding='utf-8'):
-    """
-    Reads file context
-    """
-    with codecs.open(filepath, 'r', encoding) as f:
-        return f.read()
 
 
 class BratCorpusReader(object):
