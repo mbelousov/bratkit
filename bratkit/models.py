@@ -354,13 +354,23 @@ class AnnotatedDocument(object):
         for et1, et2 in rel_ent_pairs:
             e1_list = ent_types.get(et1, [])
             e2_list = ent_types.get(et2, [])
+            if isinstance(dist_thresh, dict):
+                try:
+                    dt = dist_thresh[et1][et2]
+                except KeyError:
+                    dt = dist_thresh[et2][et1]
+            else:
+                dt = int(dist_thresh)
+
             for e1, e2 in itertools.product(e1_list, e2_list):
+
                 dist = (max(e1.span.end, e2.span.end) -
                         min(e1.span.start, e2.span.start) + 1)
                 e1e2_rels = ent_rels.get(e1.eid, {}).get(e2.eid, {})
                 if len(e1e2_rels) == 0:
                     labels = [no_rel_label]
-                    if 0 < dist_thresh < dist:
+
+                    if 0 < dt < dist:
                         # print("SKIP d=%d" % dist)
                         continue
                 else:
