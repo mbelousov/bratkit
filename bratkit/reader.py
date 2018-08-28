@@ -1,12 +1,14 @@
 from __future__ import print_function
 
-import codecs
+import fnmatch
 import glob
 import json
 import os
 import sys
 
 from bratkit.models import AnnotatedDocument
+from bratkit.utils import normpath
+from bratkit.utils import read_file_contents
 
 
 def _default(self, obj):
@@ -17,19 +19,13 @@ _default.default = json.JSONEncoder().default
 json.JSONEncoder.default = _default
 
 
-def read_file_contents(filepath, encoding='utf-8'):
-    """
-    Reads file context
-    """
-    with codecs.open(filepath, 'r', encoding) as f:
-        return f.read()
-
-
 class BratCorpusReader(object):
-    def __init__(self, corpus_path, skip_errors=False):
-        self.corpus_path = corpus_path
-        self._documents = []
+    def __init__(self, corpus_path, skip_errors=False, recursive=False):
+        self.corpus_path = normpath(corpus_path)
         self.skip_errors = skip_errors
+        self.recursive = recursive
+        self._documents = []
+        self._files = []
 
     @property
     def documents(self):
@@ -41,14 +37,23 @@ class BratCorpusReader(object):
     def num_documents(self):
         return len(self.documents)
 
+    @property
+    def files(self):
+        if not self._files:
+            self._files = self.get_files()
+        return self._files
+
+    @property
+    def num_files(self):
+        return len(self.files)
+
     def read_corpus(self):
         self._documents = []
         for doc in self.iterate_corpus():
             self._documents.append(doc)
 
     def iterate_corpus(self):
-        filepaths = self.get_files()
-        for i, filepath in enumerate(filepaths):
+        for i, filepath in enumerate(self.files):
             try:
                 d = self.process_document(filepath)
                 if d is None:
@@ -62,14 +67,27 @@ class BratCorpusReader(object):
                 raise e
 
     def get_files(self):
-        if not os.path.exists(self.corpus_path):
-            raise FileNotFoundError("%s doesn't exist" % self.corpus_path)
-        return sorted(glob.glob(os.path.join(self.corpus_path, '*.ann')))
+        if self.recursive:
+            matcher = '**/*.ann'
+        else:
+            matcher = '*.ann'
+
+        files = sorted(glob.glob(os.path.join(self.corpus_path, matcher),
+                                 recursive=self.recursive))
+        if len(files) == 0:
+            raise IOError("No matched files in %s" %
+                          self.corpus_path)
+        return files
 
     def process_document(self, filepath):
+        filepath = normpath(filepath)
         doc = AnnotatedDocument()
         doc.readfile(filepath)
         doc.text = read_file_contents(filepath[:-4] + '.txt')
+        if not fnmatch.fnmatch(os.path.dirname(filepath), self.corpus_path):
+            raise ValueError("%s is not part of %s" % (
+                filepath, self.corpus_path
+            ))
         return doc
 
     def validate(self):

@@ -13,8 +13,8 @@ def get_label_mentions(rows, label):
 
 class TestRelations(unittest.TestCase):
 
-    def __test_neg_sampling(self, neg, negval=None):
-        if negval is None:
+    def __test_neg_sampling(self, neg, negval='all'):
+        if negval is 'all':
             negval = neg
         no_rel_label = "NO_RELATION"
         corpus = BratCorpusReader('./corpus/')
@@ -28,7 +28,7 @@ class TestRelations(unittest.TestCase):
         self.assertRaises(ValueError,
                           corpus.documents[0].get_relations_rows, [])
         rows = corpus.documents[0].get_relations_rows([('Protein', 'Entity')],
-                                                      neg=None)
+                                                      neg='all')
         self.assertEqual(544, len(rows))
 
     def test_get_relations_rows_neg_sampling_disabled(self):

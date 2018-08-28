@@ -1,3 +1,4 @@
+import codecs
 import itertools
 import json
 import os
@@ -94,6 +95,10 @@ class DiscontinuousSpan(Span):
     def get(self, index):
         return list(self.__spans)[index]
 
+    @property
+    def subspans(self):
+        return sorted(self.__spans)
+
     def __unicode__(self):
         return ";".join([str(s) for s in self.__spans])
 
@@ -160,6 +165,16 @@ class Annotation(object):
     def __plural__(self):
         return self.get_plural()
 
+    def to_brat_row(self):
+        raise NotImplementedError("not implemented.")
+
+    def __hash__(self):
+        return hash(self.to_brat_row())
+
+    def __eq__(self, other):
+        return (self.__class__ == other.__class__ and
+                self.to_brat_row() == other.to_brat_row())
+
 
 class Entity(Annotation):
     """Entity (text-bound) annotation
@@ -188,6 +203,18 @@ class Entity(Annotation):
         return "<%s: %s[%s] %s>" % (
             self.eid, self.type, self.span, self.content)
 
+    def to_brat_row(self):
+        if isinstance(self.span, DiscontinuousSpan):
+            span_value = ";".join([
+                "%d %d" % (sp.start, sp.end)
+                for sp in self.span.subspans])
+        else:
+            span_value = "%d %d" % (self.span.start, self.span.end)
+
+        return "%s\t%s %s\t%s" % (
+            self.eid, self.type, span_value, self.content
+        )
+
 
 class Attribute(Annotation):
     """Attribute annotation
@@ -211,6 +238,16 @@ class Attribute(Annotation):
         return "<%s: %s %s>" % (
             self.eid, self.attr_name, self.ann_id)
 
+    def to_brat_row(self):
+        if self.value is None:
+            return "%s\t%s %s" % (
+                self.eid, self.attr_name, self.ann_id
+            )
+
+        return "%s\t%s %s %s" % (
+            self.eid, self.attr_name, self.ann_id, self.value
+        )
+
 
 class Normalization(Annotation):
     """Normalization annotation
@@ -233,6 +270,12 @@ class Normalization(Annotation):
     def __unicode__(self):
         return "<%s: %s[%s] %s>" % (self.eid, self.resource_id, self.entry_id,
                                     self.entry_value)
+
+    def to_brat_row(self):
+        return "%s\t%s %s %s:%s\t%s" % (
+            self.eid, self.type, self.ref, self.resource_id, self.entry_id,
+            self.entry_value
+        )
 
 
 class Relation(Annotation):
@@ -261,10 +304,14 @@ class Relation(Annotation):
         obj['arguments'] = self.arguments
         return obj
 
+    def to_brat_row(self):
+        argvalues = ["%s:%s" % (k, v) for k, v in self.arguments.items()]
+        return "%s\t%s %s" % (self.eid, self.type, " ".join(argvalues))
+
 
 class Equiv(Annotation):
     def __init__(self, line):
-        super().__init__(line)
+        super(Equiv, self).__init__(line)
         self.references = []
         self.type = None
         self.eid, info = line.split("\t")
@@ -272,6 +319,9 @@ class Equiv(Annotation):
         self.type, refs = parts[0], parts[1:]
         for ref in refs:
             self.references.append(ref.strip())
+
+    def to_brat_row(self):
+        return "%s\t%s %s" % (self.eid, self.type, " ".join(self.references))
 
 
 class Note(Annotation):
@@ -289,6 +339,9 @@ class Note(Annotation):
 
     def __unicode__(self):
         return '<%s: %s "%s">' % (self.eid, self.ref, self.content)
+
+    def to_brat_row(self):
+        return "%s\t%s %s\t%s" % (self.eid, self.type, self.ref, self.content)
 
 
 class AnnotatedDocument(object):
@@ -333,7 +386,7 @@ class AnnotatedDocument(object):
             ent_rels.setdefault(e1, {}).setdefault(e2, {})[rel.type] = args
         return ent_rels
 
-    def get_relations_rows(self, rel_ent_pairs, neg=None,
+    def get_relations_rows(self, rel_ent_pairs, neg='all',
                            dist_thresh=0, random_seed=None,
                            no_rel_label='NO_RELATION',
                            entfunc=None, labelfunc=None):
@@ -354,13 +407,23 @@ class AnnotatedDocument(object):
         for et1, et2 in rel_ent_pairs:
             e1_list = ent_types.get(et1, [])
             e2_list = ent_types.get(et2, [])
+            if isinstance(dist_thresh, dict):
+                try:
+                    dt = dist_thresh[et1][et2]
+                except KeyError:
+                    dt = dist_thresh[et2][et1]
+            else:
+                dt = int(dist_thresh)
+
             for e1, e2 in itertools.product(e1_list, e2_list):
+
                 dist = (max(e1.span.end, e2.span.end) -
                         min(e1.span.start, e2.span.start) + 1)
                 e1e2_rels = ent_rels.get(e1.eid, {}).get(e2.eid, {})
                 if len(e1e2_rels) == 0:
                     labels = [no_rel_label]
-                    if 0 < dist_thresh < dist:
+
+                    if 0 < dt < dist:
                         # print("SKIP d=%d" % dist)
                         continue
                 else:
@@ -370,19 +433,23 @@ class AnnotatedDocument(object):
                     neg_rows.append(row)
                 else:
                     pos_rows.append(row)
-        neg_lim = 0
 
-        if neg == 'auto':
+        if neg == 'all':
+            neg_lim = len(neg_rows)
+        elif neg == 'auto':
             neg_lim = len(pos_rows)
-        elif neg and neg > 0:
-            neg_lim = neg
+        else:
+            try:
+                neg_lim = int(neg)
+            except ValueError:
+                raise ValueError("Invalid value for neg!")
 
-        if neg_lim:
-            random.seed(random_seed)
-            random.shuffle(neg_rows)
-            neg_rows = neg_rows[:neg_lim]
-        if neg == 0:
+        if neg_lim == 0:
             return pos_rows
+
+        random.seed(random_seed)
+        random.shuffle(neg_rows)
+        neg_rows = neg_rows[:neg_lim]
         return pos_rows + neg_rows
 
     def __unicode__(self):
@@ -394,6 +461,17 @@ class AnnotatedDocument(object):
             'text': self.text,
             'annotations': self.annotations
         }
+
+    def to_brat_rows(self):
+        return [ann.to_brat_row()
+                for anns in self.annotations.values()
+                for ann in anns.values()]
+
+    def save_brat(self, output_path):
+        with codecs.open("%s.txt" % output_path, "w", "utf-8") as fp:
+            fp.write(self.text)
+        with codecs.open("%s.ann" % output_path, "w", "utf-8") as fp:
+            fp.write("\n".join(self.to_brat_rows()))
 
 
 ANNOTATION_MAP = {
