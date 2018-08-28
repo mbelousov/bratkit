@@ -20,6 +20,16 @@ class TestBratParsing(unittest.TestCase):
         self.assertEqual(ann.span, Span(11, 25))
         self.assertEqual(ann.content, "entity content")
 
+
+    def test_entity_with_tab_parser(self):
+        ann = Annotation.factory("T1	EntityType 11 25	entity\tcontent")
+        self.assertIsInstance(ann, Entity)
+        self.assertEqual(ann.eid, "T1")
+        self.assertEqual(ann.type, "EntityType")
+        self.assertEqual(ann.span, Span(11, 25))
+        self.assertEqual(ann.content, "entity\tcontent")
+
+
     def test_discontinuous_entity_parser(self):
         line = "T1	EntityType 2 9;16 35	content and another content"
         ann = Annotation.factory(line)

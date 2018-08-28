@@ -11,6 +11,11 @@ def makedirs(dirpath, remove=False):
         os.makedirs(dirpath)
 
 
+def makedirs_file(filepath):
+    folder_path = os.path.dirname(normpath(filepath))
+    makedirs(folder_path)
+
+
 def save_documents(documents, output_path):
     makedirs(output_path, remove=True)
     for doc in documents:

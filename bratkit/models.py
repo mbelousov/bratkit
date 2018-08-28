@@ -6,6 +6,7 @@ import random
 from collections import OrderedDict
 
 from bratkit.exceptions import UnsupportedAnnotationException
+from bratkit.utils import makedirs_file
 
 
 def _default(self, obj):
@@ -196,7 +197,7 @@ class Entity(Annotation):
     @classmethod
     def from_line(cls, line):
         obj = Entity()
-        obj.eid, info, content = line.strip().split("\t")
+        obj.eid, info, content = line.strip().split("\t", 2)
         info_parts = info.split(None, 1)
         obj.type = info_parts[0]
         txt_spans = info_parts[1].split(";")
@@ -518,6 +519,7 @@ class AnnotatedDocument(object):
                 for ann in anns.values()]
 
     def save_brat(self, output_path):
+        makedirs_file("%s.txt" % output_path)
         with codecs.open("%s.txt" % output_path, "w", "utf-8") as fp:
             fp.write(self.text)
         with codecs.open("%s.ann" % output_path, "w", "utf-8") as fp:
