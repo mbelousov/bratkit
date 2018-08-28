@@ -3,6 +3,7 @@ from collections import Counter
 
 from bratkit.reader import BratCorpusReader
 
+
 def get_label_mentions(rows, label):
     all_labels = [item
                   for sl in [r[2] if r[2] else [False] for r in rows]

@@ -1,4 +1,5 @@
 import os
+
 from bratkit.reader import BratCorpusReader
 
 if __name__ == '__main__':

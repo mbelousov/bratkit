@@ -135,10 +135,14 @@ class Annotation(object):
         if cls == Annotation:
             raise UnsupportedAnnotationException(line)
 
-        return cls(line)
+        return cls.from_line(line)
 
-    def __init__(self, line):
-        self.eid = line.split("\t")[0]
+    def __init__(self, eid=None):
+        self.eid = eid
+
+    @classmethod
+    def from_line(cls, line):
+        raise NotImplementedError("not implemented")
 
     def __str__(self):
         return self.__unicode__()
@@ -183,21 +187,29 @@ class Entity(Annotation):
     span = None
     content = ""
 
-    def __init__(self, line):
-        super(Entity, self).__init__(line)
-        _, info, content = line.strip().split("\t")
+    def __init__(self, eid=None, type=None, span=None, content=None):
+        super(Entity, self).__init__(eid)
+        self.type = type
+        self.span = span
+        self.content = content
+
+    @classmethod
+    def from_line(cls, line):
+        obj = Entity()
+        obj.eid, info, content = line.strip().split("\t")
         info_parts = info.split(None, 1)
-        self.type = info_parts[0]
+        obj.type = info_parts[0]
         txt_spans = info_parts[1].split(";")
         if len(txt_spans) > 1:
-            self.span = DiscontinuousSpan()
+            obj.span = DiscontinuousSpan()
             for txt_span in txt_spans:
                 sp_start, sp_end = txt_span.split()
-                self.span.add(Span(sp_start, sp_end))
+                obj.span.add(Span(sp_start, sp_end))
         else:
             sp_start, sp_end = txt_spans[0].split()
-            self.span = Span(sp_start, sp_end)
-        self.content = content.strip()
+            obj.span = Span(sp_start, sp_end)
+        obj.content = content.strip()
+        return obj
 
     def __unicode__(self):
         return "<%s: %s[%s] %s>" % (
@@ -223,16 +235,24 @@ class Attribute(Annotation):
     value = ""
     ann_id = None
 
-    def __init__(self, line):
-        super(Attribute, self).__init__(line)
-        _, info = line.strip().split("\t")
+    def __init__(self, eid=None, attr_name=None, ann_id=None, value=None):
+        super(Attribute, self).__init__(eid)
+        self.attr_name = attr_name
+        self.ann_id = ann_id
+        self.value = value
+
+    @classmethod
+    def from_line(cls, line):
+        obj = Attribute()
+        obj.eid, info = line.strip().split("\t")
         info_parts = info.split()
-        self.attr_name = info_parts[0]
-        self.ann_id = info_parts[1]
+        obj.attr_name = info_parts[0]
+        obj.ann_id = info_parts[1]
         if len(info_parts) > 2:
-            self.value = info_parts[2]
+            obj.value = info_parts[2]
         else:
-            self.value = True
+            obj.value = True
+        return obj
 
     def __unicode__(self):
         return "<%s: %s %s>" % (
@@ -260,12 +280,23 @@ class Normalization(Annotation):
     entry_id = None
     entry_value = None
 
-    def __init__(self, line):
-        super(Normalization, self).__init__(line)
-        _, info, entry_value = line.strip().split("\t")
-        self.type, self.ref, external = info.split()
-        self.resource_id, self.entry_id = external.split(':')
-        self.entry_value = entry_value.strip()
+    def __init__(self, eid=None, type=None, ref=None, external=None,
+                 resource_id=None, entry_value=None):
+        super(Normalization, self).__init__(eid)
+        self.type = type
+        self.ref = ref
+        self.external = external
+        self.resource_id = resource_id
+        self.entry_value = entry_value
+
+    @classmethod
+    def from_line(cls, line):
+        obj = Normalization()
+        obj.eid, info, entry_value = line.strip().split("\t")
+        obj.type, obj.ref, external = info.split()
+        obj.resource_id, obj.entry_id = external.split(':')
+        obj.entry_value = entry_value.strip()
+        return obj
 
     def __unicode__(self):
         return "<%s: %s[%s] %s>" % (self.eid, self.resource_id, self.entry_id,
@@ -283,16 +314,23 @@ class Relation(Annotation):
     """
     type = ""
     arguments = OrderedDict()
-    entity_arguments = {}
 
-    def __init__(self, line):
-        super(Relation, self).__init__(line)
-        info = line.split("\t")[1].split()
-        self.type = info[0]
-        self.arguments = OrderedDict()
+    def __init__(self, eid=None, type=None, arguments=None):
+        super(Relation, self).__init__(eid)
+        self.type = type
+        self.arguments = arguments
+
+    @classmethod
+    def from_line(cls, line):
+        obj = Relation()
+        obj.eid, info_data = line.split("\t")
+        info = info_data.split()
+        obj.type = info[0]
+        obj.arguments = OrderedDict()
         for arg in info[1:]:
             k, v = arg.split(':')
-            self.arguments[k] = v
+            obj.arguments[k] = v
+        return obj
 
     def __unicode__(self):
         return '<%s: %s %s>' % (
@@ -310,15 +348,22 @@ class Relation(Annotation):
 
 
 class Equiv(Annotation):
-    def __init__(self, line):
-        super(Equiv, self).__init__(line)
-        self.references = []
-        self.type = None
-        self.eid, info = line.split("\t")
+    def __init__(self, eid=None, type=None, references=None):
+        super(Equiv, self).__init__(eid)
+        self.type = type
+        self.references = references
+
+    @classmethod
+    def from_line(cls, line):
+        obj = Equiv()
+        obj.references = []
+        obj.type = None
+        obj.eid, info = line.split("\t")
         parts = info.split(' ')
-        self.type, refs = parts[0], parts[1:]
+        obj.type, refs = parts[0], parts[1:]
         for ref in refs:
-            self.references.append(ref.strip())
+            obj.references.append(ref.strip())
+        return obj
 
     def to_brat_row(self):
         return "%s\t%s %s" % (self.eid, self.type, " ".join(self.references))
@@ -327,15 +372,20 @@ class Equiv(Annotation):
 class Note(Annotation):
     """Note annotation
     """
-    type = ""
-    ref = None
-    content = ""
 
-    def __init__(self, line):
-        super(Note, self).__init__(line)
-        _, ann, content = line.split("\t")
-        self.type, self.ref = ann.split(' ')
+    def __init__(self, eid=None, type=None, ref=None, content=None):
+        super(Note, self).__init__(eid)
+        self.type = type
+        self.ref = ref
         self.content = content
+
+    @classmethod
+    def from_line(cls, line):
+        obj = Note()
+        obj.eid, ann, content = line.split("\t")
+        obj.type, obj.ref = ann.split(' ')
+        obj.content = content
+        return obj
 
     def __unicode__(self):
         return '<%s: %s "%s">' % (self.eid, self.ref, self.content)

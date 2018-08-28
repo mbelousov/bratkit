@@ -9,8 +9,8 @@ class TestSpan(unittest.TestCase):
         self.assertGreater(Span(1, 9), Span(1, 4))
 
     def test_lt(self):
-        self.assertLess(Span(2,5), Span(3, 9))
-        self.assertLess(Span(2,5), Span(2, 9))
+        self.assertLess(Span(2, 5), Span(3, 9))
+        self.assertLess(Span(2, 5), Span(2, 9))
 
 
 class TestDiscontinuousSpan(unittest.TestCase):

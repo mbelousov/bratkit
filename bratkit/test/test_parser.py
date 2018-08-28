@@ -1,8 +1,9 @@
 import unittest
+
+from bratkit.exceptions import UnsupportedAnnotationException
 from bratkit.models import Annotation, Span, DiscontinuousSpan
 from bratkit.models import Entity, Attribute, Normalization, Relation, Note
 from bratkit.models import Equiv
-from bratkit.exceptions import UnsupportedAnnotationException
 
 
 class TestBratParsing(unittest.TestCase):
