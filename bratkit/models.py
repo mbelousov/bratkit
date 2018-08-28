@@ -386,7 +386,7 @@ class AnnotatedDocument(object):
             ent_rels.setdefault(e1, {}).setdefault(e2, {})[rel.type] = args
         return ent_rels
 
-    def get_relations_rows(self, rel_ent_pairs, neg=None,
+    def get_relations_rows(self, rel_ent_pairs, neg='all',
                            dist_thresh=0, random_seed=None,
                            no_rel_label='NO_RELATION',
                            entfunc=None, labelfunc=None):
@@ -433,19 +433,23 @@ class AnnotatedDocument(object):
                     neg_rows.append(row)
                 else:
                     pos_rows.append(row)
-        neg_lim = 0
 
-        if neg == 'auto':
+        if neg == 'all':
+            neg_lim = len(neg_rows)
+        elif neg == 'auto':
             neg_lim = len(pos_rows)
-        elif neg and neg > 0:
-            neg_lim = neg
+        else:
+            try:
+                neg_lim = int(neg)
+            except ValueError:
+                raise ValueError("Invalid value for neg!")
 
-        if neg_lim:
-            random.seed(random_seed)
-            random.shuffle(neg_rows)
-            neg_rows = neg_rows[:neg_lim]
-        if neg == 0:
+        if neg_lim == 0:
             return pos_rows
+
+        random.seed(random_seed)
+        random.shuffle(neg_rows)
+        neg_rows = neg_rows[:neg_lim]
         return pos_rows + neg_rows
 
     def __unicode__(self):

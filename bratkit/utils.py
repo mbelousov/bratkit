@@ -23,3 +23,11 @@ def read_file_contents(filepath, encoding='utf-8'):
     """
     with codecs.open(filepath, 'r', encoding) as f:
         return f.read()
+
+
+def normpath(filepath):
+    filepath = os.path.expandvars(os.path.expanduser(filepath))
+    filepath = os.path.normpath(filepath)
+    if not os.path.isabs(filepath):
+        filepath = os.path.abspath(filepath)
+    return filepath
