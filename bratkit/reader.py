@@ -72,9 +72,12 @@ class CorpusReader(object):
             matcher = '**/' + self._file_match_pattern
         else:
             matcher = self._file_match_pattern
+        if self.recursive:
+            raise NotImplementedError("recursive not supported")
 
-        files = sorted(glob.glob(os.path.join(self.corpus_path, matcher),
-                                 recursive=self.recursive))
+        # files = sorted(glob.glob(os.path.join(self.corpus_path, matcher),
+        #                          recursive=self.recursive))
+        files = sorted(glob.glob(os.path.join(self.corpus_path, matcher)))
         if len(files) == 0:
             raise IOError("No matched files in %s" %
                           self.corpus_path)
