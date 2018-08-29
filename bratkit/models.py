@@ -51,6 +51,12 @@ class Span(object):
     def __hash__(self):
         return hash((self.start, self.end))
 
+    def within(self, other):
+        return self.start >= other.start and self.end <= other.end
+
+    def shift(self, s):
+        return Span(self.start + s, self.end + s)
+
     @property
     def length(self):
         return self.end - self.start
@@ -60,6 +66,9 @@ class Span(object):
 
     def __unicode__(self):
         return "%d-%d" % (self.start, self.end)
+
+    def __repr__(self):
+        return str(self.to_json())
 
     def to_json(self):
         return self.start, self.end
@@ -72,46 +81,54 @@ class DiscontinuousSpan(Span):
     """Discontinuous span defined by multiple spans (e.g. 1-4, 6-8)
     """
     __spans = set()
+    __ordered = []
 
     def __init__(self, *span_pairs):
         self.__spans = set()
+        self.__ordered = None
+
         super(DiscontinuousSpan, self).__init__()
         for span_pair in span_pairs:
             self.add(Span(span_pair[0], span_pair[1]))
 
     def __eq__(self, other):
-        eq = isinstance(other, self.__class__) and len(self.__spans) == len(
-            other.__spans)
+        eq = (isinstance(other, self.__class__) and self.length == other.length
+              and self.num_subspans == other.num_subspans)
         i = 0
-        while eq and i < len(self.__spans):
+        while eq and i < self.num_subspans:
             eq = self.get(i) == other.get(i)
             i += 1
         return eq
 
     def add(self, span):
         self.__spans.add(span)
-        self.start = min(self.__spans).start
-        self.end = max(self.__spans).end
+        self.__ordered = sorted(self.__spans)
+        self.start = self.subspans[0].start
+        self.end = self.subspans[-1].end
 
     def get(self, index):
-        return list(self.__spans)[index]
+        return self.subspans[index]
 
     @property
     def subspans(self):
-        return sorted(self.__spans)
+        return self.__ordered
+
+    @property
+    def num_subspans(self):
+        return len(self.__spans)
 
     def __unicode__(self):
-        return ";".join([str(s) for s in self.__spans])
+        return ";".join([str(s) for s in self.subspans])
 
     def to_json(self):
-        return list(self.__spans)
+        return list(self.subspans)
 
     @property
     def length(self):
         return sum([s.length for s in self.__spans])
 
     def get_span_text(self, text):
-        return " ".join([text[s.start:s.end] for s in sorted(self.__spans)])
+        return " ".join([text[s.start:s.end] for s in self.subspans])
 
 
 class Annotation(object):
@@ -166,6 +183,10 @@ class Annotation(object):
             plural = singular + 's'
         return plural
 
+    @classmethod
+    def get_kind_name(cls):
+        return cls.get_plural().lower()
+
     @property
     def __plural__(self):
         return self.get_plural()
@@ -193,6 +214,7 @@ class Entity(Annotation):
         self.type = type
         self.span = span
         self.content = content
+        self._validaite_data()
 
     @classmethod
     def from_line(cls, line):
@@ -210,7 +232,26 @@ class Entity(Annotation):
             sp_start, sp_end = txt_spans[0].split()
             obj.span = Span(sp_start, sp_end)
         obj.content = content.strip()
+        obj._validaite_data()
         return obj
+
+    def _validaite_data(self):
+        if self.content is None:
+            return False
+
+        newline = "\n"
+        if newline not in self.content:
+            return True
+        curr = 0
+        lines = self.content.split(newline)
+        dsp = DiscontinuousSpan()
+        for line in lines:
+            line = line.strip()
+            dsp.add(Span(self.span.start + curr,
+                         self.span.start + curr + len(line)))
+            curr += len(line) + len(newline)
+        self.span = dsp
+        return True
 
     def __unicode__(self):
         return "<%s: %s[%s] %s>" % (
@@ -225,7 +266,7 @@ class Entity(Annotation):
             span_value = "%d %d" % (self.span.start, self.span.end)
 
         return "%s\t%s %s\t%s" % (
-            self.eid, self.type, span_value, self.content
+            self.eid, self.type, span_value, self.content.replace("\n", " ")
         )
 
 
@@ -319,7 +360,10 @@ class Relation(Annotation):
     def __init__(self, eid=None, type=None, arguments=None):
         super(Relation, self).__init__(eid)
         self.type = type
-        self.arguments = arguments
+        if self.arguments and not isinstance(arguments, OrderedDict):
+            self.arguments = OrderedDict(arguments)
+        else:
+            self.arguments = arguments
 
     @classmethod
     def from_line(cls, line):
@@ -397,21 +441,21 @@ class Note(Annotation):
 
 class AnnotatedDocument(object):
     def __init__(self):
-        self.annotations = {}
         self.text = ""
         self.uid = 0
+        self._annotations = {}
 
     def __parse_line(self, line):
         annotation = Annotation.factory(line)
         if annotation is None:
             return False
-        k = annotation.__plural__.lower()
-        self.annotations.setdefault(k, {})[annotation.eid] = annotation
+        self.add(annotation)
+        return annotation
 
-    def readfile(self, filepath):
-        self.annotations = {}
-        for _, cls in ANNOTATION_MAP.items():
-            self.annotations[cls.get_plural().lower()] = {}
+    def read_ann_file(self, filepath):
+        self._annotations = {}
+        # for _, cls in ANNOTATION_MAP.items():
+        #     self._annotations[cls.get_kind_name()] = {}
         self.uid = os.path.splitext(os.path.basename(filepath))[0]
         with open(filepath, 'r') as f:
             for line in f:
@@ -421,16 +465,50 @@ class AnnotatedDocument(object):
     def __entity_order(self):
         return ['T', 'N', 'R', '#']
 
-    def get_entities(self):
-        return self.annotations.get('entities', {})
+    def get_annotations(self, kind):
+        k = kind.get_kind_name()
+        self._annotations.setdefault(k, {})
+        return self._annotations[k]
 
-    def get_relations(self):
-        return self.annotations.get('relations', {})
+    @property
+    def entities(self):
+        return self.get_annotations(Entity)
+
+    def add_many(self, annotations):
+        for ann in annotations:
+            self.add(ann)
+
+    def add(self, annotation):
+        annset = self.get_annotations(annotation.__class__)
+        if annotation.eid in annset:
+            raise ValueError("Annotation %s is already exists." % (
+                annotation.eid))
+        annset[annotation.eid] = annotation
+
+    @property
+    def relations(self):
+        return self.get_annotations(Relation)
+
+    @property
+    def attributes(self):
+        return self.get_annotations(Attribute)
+
+    @property
+    def normalizations(self):
+        return self.get_annotations(Normalization)
+
+    @property
+    def notes(self):
+        return self.get_annotations(Note)
+
+    @property
+    def equivs(self):
+        return self.get_annotations(Equiv)
 
     def get_entities_relations(self):
         ent_rels = {}
-        for rid, rel in self.annotations.get('relations', {}).items():
-            args = {argname: self.annotations['entities'][argval]
+        for rid, rel in self.relations.items():
+            args = {argname: self.entities[argval]
                     for argname, argval in rel.arguments.items()}
             # rows[rid] = (rel.type, args)
             e1, e2 = list(rel.arguments.values())
@@ -452,7 +530,7 @@ class AnnotatedDocument(object):
         neg_rows = []
         ent_rels = self.get_entities_relations()
         ent_types = {}
-        for ent in self.get_entities().values():
+        for ent in self.entities.values():
             ent_types.setdefault(ent.type, []).append(ent)
 
         for et1, et2 in rel_ent_pairs:
@@ -510,12 +588,12 @@ class AnnotatedDocument(object):
         return {
             'eid': self.uid,
             'text': self.text,
-            'annotations': self.annotations
+            'annotations': self._annotations
         }
 
     def to_brat_rows(self):
         return [ann.to_brat_row()
-                for anns in self.annotations.values()
+                for anns in self._annotations.values()
                 for ann in anns.values()]
 
     def save_brat(self, output_path):
@@ -524,6 +602,22 @@ class AnnotatedDocument(object):
             fp.write(self.text)
         with codecs.open("%s.ann" % output_path, "w", "utf-8") as fp:
             fp.write("\n".join(self.to_brat_rows()))
+
+    def filter_annotations(self, span):
+        return [
+            ann for k, anns in self._annotations.items()
+            for aid, ann in anns.items() if ann.span.within(span)
+        ]
+
+    def crop(self, span):
+        cropped = AnnotatedDocument()
+        cropped.uid = '%s_crop%s' % (self.uid, span)
+        cropped.text = self.text[span.start:span.end]
+        cr_annotations = self.filter_annotations(span)
+        for ann in cr_annotations:
+            ann.span = ann.span.shift(-span.start)
+            cropped.add(ann)
+        return cropped
 
 
 ANNOTATION_MAP = {

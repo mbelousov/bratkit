@@ -19,13 +19,14 @@ _default.default = json.JSONEncoder().default
 json.JSONEncoder.default = _default
 
 
-class BratCorpusReader(object):
+class CorpusReader(object):
     def __init__(self, corpus_path, skip_errors=False, recursive=False):
         self.corpus_path = normpath(corpus_path)
         self.skip_errors = skip_errors
         self.recursive = recursive
         self._documents = []
         self._files = []
+        self._file_match_pattern = None
 
     @property
     def documents(self):
@@ -68,9 +69,9 @@ class BratCorpusReader(object):
 
     def get_files(self):
         if self.recursive:
-            matcher = '**/*.ann'
+            matcher = '**/' + self._file_match_pattern
         else:
-            matcher = '*.ann'
+            matcher = self._file_match_pattern
 
         files = sorted(glob.glob(os.path.join(self.corpus_path, matcher),
                                  recursive=self.recursive))
@@ -80,9 +81,36 @@ class BratCorpusReader(object):
         return files
 
     def process_document(self, filepath):
+        raise NotImplementedError("not implemented")
+
+
+class TextCorpusReader(CorpusReader):
+    def __init__(self, corpus_path, skip_errors=False, recursive=False):
+        super(TextCorpusReader, self).__init__(corpus_path,
+                                               skip_errors=skip_errors,
+                                               recursive=recursive)
+
+        self._file_match_pattern = '*.txt'
+
+    def process_document(self, filepath):
+        doc = AnnotatedDocument()
+        doc.uid = os.path.splitext(os.path.basename(filepath))[0]
+        doc.text = read_file_contents(filepath)
+        return doc
+
+
+class BratCorpusReader(CorpusReader):
+    def __init__(self, corpus_path, skip_errors=False, recursive=False):
+        super(BratCorpusReader, self).__init__(corpus_path,
+                                               skip_errors=skip_errors,
+                                               recursive=recursive)
+
+        self._file_match_pattern = '*.ann'
+
+    def process_document(self, filepath):
         filepath = normpath(filepath)
         doc = AnnotatedDocument()
-        doc.readfile(filepath)
+        doc.read_ann_file(filepath)
         doc.text = read_file_contents(filepath[:-4] + '.txt')
         if not fnmatch.fnmatch(os.path.dirname(filepath), self.corpus_path):
             raise ValueError("%s is not part of %s" % (
@@ -95,7 +123,7 @@ class BratCorpusReader(object):
             self.validate_entities(doc)
 
     def validate_entities(self, doc, strip_content=False):
-        for eid, ent in doc.annotations['entities'].items():
+        for eid, ent in doc.entities.items():
             doc_content = ent.span.get_span_text(doc.text)
             ent_content = ent.content
             if strip_content:
