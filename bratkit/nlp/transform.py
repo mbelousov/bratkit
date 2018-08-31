@@ -21,19 +21,19 @@ class LabelSequenceGenerator(object):
         else:
             self.tokenizer = tokenizer
 
-    def _tokenize(self, text, with_spans=False):
-        return tokenize(self.tokenizer, text, with_spans=with_spans)
+    def _tokenize(self, text):
+        return tokenize(self.tokenizer, text, with_spans=True)
 
-    def _split(self, text, with_spans=False):
-        return tokenize(self.splitter, text, with_spans=with_spans)
+    def split_blocks(self, text):
+        return tokenize(self.splitter, text, with_spans=True)
 
     def transform_document(self, doc):
         tokens = []
         labels = []
 
-        splitted = self._split(doc.text, with_spans=True)
+        splitted = self.split_blocks(doc.text)
         for bltxt, blsp in splitted:
-            tokenised = self._tokenize(bltxt, with_spans=True)
+            tokenised = self._tokenize(bltxt)
             char2token = construct_char_token_map(tokenised)
 
             markers = np.asarray([self.outside_label] * len(tokenised),
@@ -55,4 +55,7 @@ class LabelSequenceGenerator(object):
         prg = documents
         if verbose:
             prg = tqdm(documents, desc='transforming')
-        return list(zip(*[self.transform_document(d) for d in prg]))
+        transformed = [self.transform_document(d) for d in prg]
+        if len(transformed) == 0:
+            return []
+        return list(zip(*transformed))
