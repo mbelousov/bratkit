@@ -1,16 +1,15 @@
 import numpy as np
-from nltk.tokenize import WordPunctTokenizer, PunktSentenceTokenizer
-from tqdm import tqdm
-
 from bratkit.models import Span
 from bratkit.nlp.utils import tokenize, construct_char_token_map, set_slice_val
+from nltk.tokenize import WordPunctTokenizer, PunktSentenceTokenizer
+from tqdm import tqdm
 
 
 class LabelSequenceGenerator(object):
     DEFAULT_OUTSIDE_LABEL = 'O'
 
     def __init__(self, outside_label=DEFAULT_OUTSIDE_LABEL,
-                 tokenizer=None, splitter=None):
+                 tokenizer=None, splitter=None, filter_labels=None):
         self.outside_label = outside_label
         if splitter is None:
             self.splitter = PunktSentenceTokenizer()
@@ -20,6 +19,8 @@ class LabelSequenceGenerator(object):
             self.tokenizer = WordPunctTokenizer()
         else:
             self.tokenizer = tokenizer
+
+        self.filter_labels = filter_labels
 
     def _tokenize(self, text):
         return tokenize(self.tokenizer, text, with_spans=True)
@@ -40,6 +41,9 @@ class LabelSequenceGenerator(object):
                                  dtype='U12')
             for ent in doc.entities.values():
                 if not ent.span.within(blsp):
+                    continue
+
+                if self.filter_labels and ent.type not in self.filter_labels:
                     continue
                 ets = Span(char2token[ent.span.start - blsp.start],
                            char2token[ent.span.end - blsp.start - 1] + 1)

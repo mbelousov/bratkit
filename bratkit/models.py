@@ -470,9 +470,6 @@ class AnnotatedDocument(object):
         self._annotations.setdefault(k, {})
         return self._annotations[k]
 
-    @property
-    def entities(self):
-        return self.get_annotations(Entity)
 
     def add_many(self, annotations):
         for ann in annotations:
@@ -484,6 +481,10 @@ class AnnotatedDocument(object):
             raise ValueError("Annotation %s is already exists." % (
                 annotation.eid))
         annset[annotation.eid] = annotation
+
+    @property
+    def entities(self):
+        return self.get_annotations(Entity)
 
     @property
     def relations(self):
