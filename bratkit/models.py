@@ -465,46 +465,71 @@ class AnnotatedDocument(object):
     def __entity_order(self):
         return ['T', 'N', 'R', '#']
 
-    def get_annotations(self, kind):
+    def _get_annotations(self, kind):
         k = kind.get_kind_name()
         self._annotations.setdefault(k, {})
         return self._annotations[k]
 
+    def _remove_annotations(self, kind):
+        k = kind.get_kind_name()
+        if k in self._annotations:
+            self._annotations[k] = {}
 
     def add_many(self, annotations):
         for ann in annotations:
             self.add(ann)
 
     def add(self, annotation):
-        annset = self.get_annotations(annotation.__class__)
+        annset = self._get_annotations(annotation.__class__)
         if annotation.eid in annset:
             raise ValueError("Annotation %s is already exists." % (
                 annotation.eid))
         annset[annotation.eid] = annotation
 
+    def clean_entities(self):
+        return self._remove_annotations(Entity)
+
+    def clean_relations(self):
+        return self._remove_annotations(Relation)
+
+    def clean_attributes(self):
+        return self._remove_annotations(Attribute)
+
+    def clean_normalizations(self):
+        return self._remove_annotations(Normalization)
+
+    def clean_notes(self):
+        return self._remove_annotations(Note)
+
+    def clean_equivs(self):
+        return self._remove_annotations(Equiv)
+
+    def clean_annotations(self):
+        self._annotations = {}
+
     @property
     def entities(self):
-        return self.get_annotations(Entity)
+        return self._get_annotations(Entity)
 
     @property
     def relations(self):
-        return self.get_annotations(Relation)
+        return self._get_annotations(Relation)
 
     @property
     def attributes(self):
-        return self.get_annotations(Attribute)
+        return self._get_annotations(Attribute)
 
     @property
     def normalizations(self):
-        return self.get_annotations(Normalization)
+        return self._get_annotations(Normalization)
 
     @property
     def notes(self):
-        return self.get_annotations(Note)
+        return self._get_annotations(Note)
 
     @property
     def equivs(self):
-        return self.get_annotations(Equiv)
+        return self._get_annotations(Equiv)
 
     def get_entities_relations(self):
         ent_rels = {}
