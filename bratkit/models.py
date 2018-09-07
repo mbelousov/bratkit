@@ -4,6 +4,7 @@ import json
 import os
 import random
 from collections import OrderedDict
+from copy import copy
 
 from bratkit.exceptions import UnsupportedAnnotationException
 from bratkit.utils import makedirs_file
@@ -461,6 +462,43 @@ class AnnotatedDocument(object):
             for line in f:
                 self.__parse_line(line)
 
+    def get_highest_annotation_id(self, kind=None):
+        if kind is None:
+            anns = [ann for anns in self._annotations.values()
+                    for ann in anns.values()]
+        else:
+            anns = self._get_annotations(kind).values()
+
+        if anns:
+            return max([int(a.eid[1:]) for a in anns])
+        return 0
+
+    @classmethod
+    def from_pair(cls, doc1, doc2):
+
+        d1 = copy(doc1)
+        d2 = copy(doc2)
+
+        d = AnnotatedDocument()
+        assert d1.text == d2.text
+        d.uid = d1.uid
+        d.text = d1.text
+        shift = d1.get_highest_annotation_id()
+
+        d.add_many(d1.entities.values())
+        d.add_many(d1.relations.values())
+        d.add_many(d1.attributes.values())
+        d.add_many(d1.normalizations.values())
+        d.add_many(d1.notes.values())
+        d.add_many(d1.equivs.values())
+        d.add_many_shifted(d2.entities.values(), shift=shift)
+        d.add_many_shifted(d2.relations.values(), shift=shift)
+        d.add_many_shifted(d2.attributes.values(), shift=shift)
+        d.add_many_shifted(d2.normalizations.values(), shift=shift)
+        d.add_many_shifted(d2.notes.values(), shift=shift)
+        d.add_many_shifted(d2.equivs.values(), shift=shift)
+        return d
+
     @property
     def __entity_order(self):
         return ['T', 'N', 'R', '#']
@@ -485,6 +523,15 @@ class AnnotatedDocument(object):
             raise ValueError("Annotation %s is already exists." % (
                 annotation.eid))
         annset[annotation.eid] = annotation
+
+    def add_shifted(self, annotation, shift):
+        annotation.eid = "%s%d" % (annotation.eid[0],
+                                   int(annotation.eid[1:]) + shift)
+        self.add(annotation)
+
+    def add_many_shifted(self, annotations, shift):
+        for ann in annotations:
+            self.add_shifted(ann, shift)
 
     def clean_entities(self):
         return self._remove_annotations(Entity)
