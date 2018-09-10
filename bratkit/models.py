@@ -5,11 +5,70 @@ import os
 import random
 from collections import OrderedDict
 from copy import copy
+from enum import Enum
 
 from bratkit.exceptions import UnsupportedAnnotationException
 from bratkit.utils import makedirs_file
 
 
+class MergeMode(Enum):
+    """
+    The mode defines how two entities with the same TYPE should be merged
+    """
+    OVERLAP = 1  # only if two entities overlaps
+    EXACT = 2  # only if two entities has exactly the same spans
+    ALL = 3  # take all entities from both sets
+    RIGHT_ONLY = 4
+    LEFT_ONLY = 5
+
+
+def merge_entities(entities1, entities2, merge=None):
+    if merge is None:
+        merge = {'*': MergeMode.ALL}
+
+    entities = {}
+    for e1 in entities1:
+        em = merge.get(e1.type, merge['*'])
+        valid = False
+        if em == MergeMode.EXACT:
+            valid = any(e1.span == e2.span and e1.type == e2.type
+                        for e2 in entities2)
+        elif em == MergeMode.OVERLAP:
+            valid = any(e1.span.within(e2.span) and e1.type == e2.type
+                        for e2 in entities2)
+        elif em in (MergeMode.RIGHT_ONLY, MergeMode.ALL):
+            valid = True
+        if valid:
+            entities[e1.eid] = e1
+
+    shift = max([int(a.eid[1:]) for a in entities1])
+    for e2 in entities2:
+        em = merge.get(e2.type, merge['*'])
+        if em in (MergeMode.ALL, MergeMode.LEFT_ONLY):
+            if e2.eid in entities:
+                e2.eid = "%s%d" % (e2.eid[0],
+                                   int(e2.eid[1:]) + shift)
+            entities[e2.eid] = e2
+    return entities.values()
+
+
+# def merge_annotation(self, annotation, shift, merge):
+#
+#     if merge == MergeMode.ALL:
+#         annotation.eid = "%s%d" % (annotation.eid[0],
+#                                    int(annotation.eid[1:]) + shift)
+#     elif merge == MergeMode.EXACT:
+#         anns = {aid: ann for aid, ann in self._annotations.items()
+#                 if ann.type == annotation.type}
+#         m = self.filter_annotations(
+#             anns.items(),
+#             cmp=lambda x, kw: x.span == kw['span'],
+#             span=annotation.span)
+#         if m:
+#             self.add(annotation)
+# def merge_many(self, annotations, shift, merge):
+#     for ann in annotations:
+#         self.merge_annotation(ann, shift, merge)
 def _default(self, obj):
     return getattr(obj.__class__, "to_json", _default.default)(obj)
 
@@ -475,7 +534,6 @@ class AnnotatedDocument(object):
 
     @classmethod
     def from_pair(cls, doc1, doc2):
-
         d1 = copy(doc1)
         d2 = copy(doc2)
 
@@ -491,12 +549,14 @@ class AnnotatedDocument(object):
         d.add_many(d1.normalizations.values())
         d.add_many(d1.notes.values())
         d.add_many(d1.equivs.values())
+
         d.add_many_shifted(d2.entities.values(), shift=shift)
         d.add_many_shifted(d2.relations.values(), shift=shift)
         d.add_many_shifted(d2.attributes.values(), shift=shift)
         d.add_many_shifted(d2.normalizations.values(), shift=shift)
         d.add_many_shifted(d2.notes.values(), shift=shift)
         d.add_many_shifted(d2.equivs.values(), shift=shift)
+
         return d
 
     @property
@@ -676,17 +736,22 @@ class AnnotatedDocument(object):
         with codecs.open("%s.ann" % output_path, "w", "utf-8") as fp:
             fp.write("\n".join(self.to_brat_rows()))
 
-    def filter_annotations(self, span):
+    def filter_annotations(self, annotations, cmp=None, **kwargs):
+        if cmp is None:
+            cmp = lambda x, kw: True
         return [
-            ann for k, anns in self._annotations.items()
-            for aid, ann in anns.items() if ann.span.within(span)
+            ann for k, anns in annotations
+            for aid, ann in anns.items() if cmp(ann, **kwargs)
         ]
 
     def crop(self, span):
         cropped = AnnotatedDocument()
         cropped.uid = '%s_crop%s' % (self.uid, span)
         cropped.text = self.text[span.start:span.end]
-        cr_annotations = self.filter_annotations(span)
+        cr_annotations = self.filter_annotations(
+            self._annotations.items(),
+            cmp=lambda x, kw: x.span.within(kw['span']),
+            span=span)
         for ann in cr_annotations:
             ann.span = ann.span.shift(-span.start)
             cropped.add(ann)
