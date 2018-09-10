@@ -117,6 +117,9 @@ class Span(object):
     def shift(self, s):
         return Span(self.start + s, self.end + s)
 
+    def overlaps(self, other):
+        return min(self.end, other.end) - max(self.start, other.start) > 0
+
     @property
     def length(self):
         return self.end - self.start
