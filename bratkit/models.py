@@ -471,6 +471,8 @@ class Equiv(Annotation):
         obj.references = []
         obj.type = None
         obj.eid, info = line.split("\t")
+        if obj.eid == '*':
+            obj.eid = '%s%s' % ('*', str(random.random())[2:])
         parts = info.split(' ')
         obj.type, refs = parts[0], parts[1:]
         for ref in refs:
