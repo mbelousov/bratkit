@@ -4,7 +4,7 @@ from bratkit.nlp.utils import tokenize, construct_char_token_map, set_slice_val
 from nltk.tokenize import WordPunctTokenizer, PunktSentenceTokenizer
 from tqdm import tqdm
 
-
+import warnings
 class LabelSequenceGenerator(object):
     DEFAULT_OUTSIDE_LABEL = 'O'
 
@@ -45,8 +45,15 @@ class LabelSequenceGenerator(object):
 
                 if self.filter_labels and ent.type not in self.filter_labels:
                     continue
-                ets = Span(char2token[ent.span.start - blsp.start],
-                           char2token[ent.span.end - blsp.start - 1] + 1)
+                tok_start = ent.span.start - blsp.start
+                tok_end = ent.span.end - blsp.start - 1
+                if char2token[tok_start] is None:
+                    warnings.warn("Problem with %s : %s -> \"%s\"" % (doc.uid, ent, bltxt[tok_start:tok_end].strip()))
+                    while char2token[tok_start] is None:
+                        tok_start += 1
+
+                ets = Span(char2token[tok_start],
+                           char2token[tok_end] + 1)
                 markers = set_slice_val(markers, ets.start, ets.end, ent.type)
 
             tokenised = [(t, sp.shift(blsp.start))

@@ -212,6 +212,10 @@ class Annotation(object):
         if line == '':
             return None
         entry_id = line.split("\t")[0]
+        if entry_id[0] == 'E':
+            # print("SKIP EVENT: %s" % line)
+            return None
+
         cls = ANNOTATION_MAP.get(entry_id[0], Annotation)
         if cls == Annotation:
             raise UnsupportedAnnotationException(line)
