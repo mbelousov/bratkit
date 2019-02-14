@@ -5,6 +5,8 @@ from nltk.tokenize import WordPunctTokenizer, PunktSentenceTokenizer
 from tqdm import tqdm
 
 import warnings
+
+
 class LabelSequenceGenerator(object):
     DEFAULT_OUTSIDE_LABEL = 'O'
 
@@ -47,10 +49,12 @@ class LabelSequenceGenerator(object):
                     continue
                 tok_start = ent.span.start - blsp.start
                 tok_end = ent.span.end - blsp.start - 1
-                if char2token[tok_start] is None:
+                if char2token[tok_start] is None or char2token[tok_end] is None:
                     warnings.warn("Problem with %s : %s -> \"%s\"" % (doc.uid, ent, bltxt[tok_start:tok_end].strip()))
                     while char2token[tok_start] is None:
                         tok_start += 1
+                    while char2token[tok_end] is None:
+                        tok_end -= 1
 
                 ets = Span(char2token[tok_start],
                            char2token[tok_end] + 1)
