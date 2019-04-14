@@ -389,13 +389,13 @@ class Normalization(Annotation):
     entry_id = None
     entry_value = None
 
-    def __init__(self, eid=None, type=None, ref=None, external=None,
-                 resource_id=None, entry_value=None):
+    def __init__(self, eid=None, type="Reference", ref=None,
+                 resource_id=None, entry_id=None, entry_value=None):
         super(Normalization, self).__init__(eid)
         self.type = type
         self.ref = ref
-        self.external = external
         self.resource_id = resource_id
+        self.entry_id = entry_id
         self.entry_value = entry_value
 
     @classmethod
